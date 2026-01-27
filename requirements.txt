@@ -7,3 +7,6 @@ numpy==1.26.3
 python-multipart==0.0.6
 pydantic==2.6.0
 requests==2.31.0
+redis==5.0.1
+pydantic-settings==2.2.1
+prometheus-client==0.20.0

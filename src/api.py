@@ -3,15 +3,18 @@ EcoPredict FastAPI Backend
 REST API for serving biodiversity decline predictions
 """
 
-from fastapi import FastAPI, HTTPException, Query
+from fastapi import FastAPI, HTTPException, Query, Response
 from pydantic import BaseModel, Field
 import pickle
 import numpy as np
 from typing import Optional, List
+import time
 import os
 from src.gbif_client import gbif_client
 from src.data_processor import data_processor
 from src.logger import logger
+from src.metrics import REQUEST_COUNT, REQUEST_LATENCY, PREDICTION_COUNT, CACHE_HITS, EXCEPTIONS
+from src.cache import cache
 
 
 # Initialize FastAPI app
@@ -133,6 +136,21 @@ async def predict(request: PredictionRequest):
         )
     
     try:
+        start_time = time.time()
+
+        # Cache lookup
+        cache_key = cache.get_prediction_cache_key({
+            "latitude": request.latitude,
+            "longitude": request.longitude,
+            "year": request.year,
+            "species": request.species
+        })
+        cached = cache.get(cache_key)
+        if cached:
+            CACHE_HITS.labels(endpoint="predict").inc()
+            REQUEST_LATENCY.labels(endpoint="/predict").observe(time.time() - start_time)
+            REQUEST_COUNT.labels(endpoint="/predict", method="POST", status="200").inc()
+            return PredictionResponse(**cached)
         # Encode species
         if request.species not in species_encoder.classes_:
             # If species not in training data, use a default encoding
@@ -160,17 +178,39 @@ async def predict(request: PredictionRequest):
         # Determine status
         status = "High Risk" if prediction == 1 else "Stable"
         
-        return PredictionResponse(
+        result = PredictionResponse(
             decline_risk=int(prediction),
             status=status,
             confidence=confidence
         )
+
+        # Cache set
+        cache.set(cache_key, result.model_dump())
+
+        # Metrics
+        PREDICTION_COUNT.labels(status="high_risk" if prediction == 1 else "stable").inc()
+        REQUEST_LATENCY.labels(endpoint="/predict").observe(time.time() - start_time)
+        REQUEST_COUNT.labels(endpoint="/predict", method="POST", status="200").inc()
+
+        return result
     
     except Exception as e:
+        EXCEPTIONS.labels(endpoint="/predict").inc()
         raise HTTPException(
             status_code=500,
             detail=f"Prediction error: {str(e)}"
         )
+
+
+@app.get("/metrics")
+async def metrics():
+    """Prometheus metrics endpoint"""
+    try:
+        from prometheus_client import generate_latest, CONTENT_TYPE_LATEST
+        data = generate_latest()
+        return Response(content=data, media_type=CONTENT_TYPE_LATEST)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Metrics error: {e}")
 
 
 @app.get("/species")
