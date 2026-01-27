@@ -4,6 +4,7 @@ Unit and integration tests for FastAPI endpoints
 """
 
 import pytest
+from unittest.mock import patch, MagicMock
 from fastapi.testclient import TestClient
 from src.api import app
 
@@ -12,6 +13,15 @@ from src.api import app
 def client():
     """Test client fixture"""
     return TestClient(app)
+
+
+@pytest.fixture(autouse=True)
+def mock_models():
+    """Mock model loading to avoid FileNotFoundError in CI"""
+    with patch('src.api.model', MagicMock()), \
+         patch('src.api.species_encoder', MagicMock()), \
+         patch('src.api.cache', MagicMock()):
+        yield
 
 
 class TestHealthEndpoints:
@@ -46,11 +56,17 @@ class TestPredictionEndpoint:
             "species": "Apis mellifera"
         }
     
-    def test_predict_valid_request(self, client, valid_request):
+    @patch('src.api.model')
+    @patch('src.api.cache')
+    def test_predict_valid_request(self, mock_cache, mock_model, client, valid_request):
         """Test prediction with valid request"""
+        mock_model.predict.return_value = [0]
+        mock_model.predict_proba.return_value = [[0.8, 0.2]]
+        mock_cache.get.return_value = None
+        mock_cache.set.return_value = True
+        
         response = client.post("/predict", json=valid_request)
-        # May fail if model not trained, that's ok for structure test
-        assert response.status_code in [200, 503]
+        assert response.status_code == 200
     
     def test_predict_invalid_latitude(self, client, valid_request):
         """Test prediction with invalid latitude"""
@@ -77,11 +93,12 @@ class TestPredictionEndpoint:
 class TestSpeciesEndpoint:
     """Test species listing endpoint"""
     
-    def test_list_species(self, client):
+    @patch('src.api.species_encoder')
+    def test_list_species(self, mock_encoder, client):
         """Test species listing"""
+        mock_encoder.classes_ = ["Apis mellifera", "Bombus terrestris"]
         response = client.get("/species")
-        # May fail if encoder not loaded
-        assert response.status_code in [200, 503]
+        assert response.status_code == 200
 
 
 if __name__ == "__main__":
