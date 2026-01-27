@@ -5,7 +5,7 @@ Processes GBIF data for ML model training
 
 import pandas as pd
 import numpy as np
-from typing import List, Tuple, Optional
+from typing import List, Optional
 from src.gbif_client import GBIFOccurrence, gbif_client
 from src.logger import logger
 
@@ -51,7 +51,6 @@ class DataProcessor:
             if len(species_data) < 2:
                 continue
 
-            years = species_data["year"].values
             counts = species_data["count"].values
 
             # Split into early and recent periods
@@ -114,7 +113,7 @@ class DataProcessor:
 
                 # Create synthetic declining labels for recent urban records
                 urban_threshold_lat = df["latitude"].quantile([0.25, 0.75])
-                urban_threshold_lon = df["longitude"].quantile([0.25, 0.75])
+                _ = df["longitude"].quantile([0.25, 0.75])
 
                 synthetic_declining = (
                     (df["year"] >= recent_year - 2)

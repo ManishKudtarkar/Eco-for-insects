@@ -5,7 +5,6 @@ Interactive web interface for biodiversity decline predictions
 
 import streamlit as st
 import requests
-import pandas as pd
 import pickle
 import os
 from datetime import datetime
@@ -162,12 +161,12 @@ def main():
         st.markdown("---")
         st.markdown("### About")
         st.markdown("""
-        EcoPredict uses machine learning to forecast insect biodiversity decline 
+        EcoPredict uses machine learning to forecast insect biodiversity decline
         based on environmental and species data.
-        
-        **Model:** Random Forest  
-        **Framework:** Scikit-learn  
-        **API:** FastAPI  
+
+        **Model:** Random Forest
+        **Framework:** Scikit-learn
+        **API:** FastAPI
         """)
 
     # Main content
@@ -278,13 +277,13 @@ def main():
                     st.markdown("### 📖 Interpretation")
                     if result["decline_risk"] == 1:
                         st.warning("""
-                        **High Risk**: The model predicts that this species is at risk of 
-                        biodiversity decline in the specified location and time period. 
+                        **High Risk**: The model predicts that this species is at risk of
+                        biodiversity decline in the specified location and time period.
                         Conservation efforts may be needed.
                         """)
                     else:
                         st.success("""
-                        **Stable**: The model predicts that this species population is 
+                        **Stable**: The model predicts that this species population is
                         stable in the specified location and time period.
                         """)
         else:

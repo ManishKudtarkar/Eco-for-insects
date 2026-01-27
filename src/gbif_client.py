@@ -124,7 +124,7 @@ class GBIFClient:
                 try:
                     event_date = datetime.fromisoformat(record["eventDate"].replace("Z", "+00:00"))
                     year = event_date.year
-                except:
+                except Exception:  # noqa: E722
                     pass
 
             if not year:

@@ -4,7 +4,6 @@ Trains a Random Forest classifier to predict insect biodiversity decline risk
 """
 
 import pandas as pd
-import numpy as np
 from sklearn.model_selection import train_test_split
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.preprocessing import LabelEncoder
@@ -37,14 +36,14 @@ def load_and_prepare_data(filepath="data/insect.csv", use_gbif: bool = False):
             df = data_processor.fetch_and_prepare_dataset(max_records=1000, save_path=filepath)
 
     print(f"Dataset shape: {df.shape}")
-    print(f"\nColumns: {df.columns.tolist()}")
-    print(f"\nFirst few rows:")
+    print("\nColumns:", df.columns.tolist())
+    print("\nFirst few rows:")
     print(df.head())
 
     # Create decline risk label (1 = declining, 0 = stable)
     df["decline_risk"] = (df["population_trend"] == "declining").astype(int)
 
-    print(f"\nDecline risk distribution:")
+    print("\nDecline risk distribution:")
     print(df["decline_risk"].value_counts())
 
     return df
@@ -94,7 +93,7 @@ def train_model(X_train, y_train):
     model.fit(X_train, y_train)
 
     print("Model training completed!")
-    print(f"\nFeature importances:")
+    print("\nFeature importances:")
     return model
 
 
