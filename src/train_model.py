@@ -197,12 +197,9 @@ def main(use_gbif: bool = False):
     print("\nNext steps:")
     print("1. Run API: uvicorn src.api:app --reload")
     print("2. Run Web App: streamlit run src/app.py")
-import sys
-    
-    # Check for --gbif flag
-    use_gbif = '--gbif' in sys.argv
-    
-    main(use_gbif=use_gbif
 
 if __name__ == "__main__":
-    main()
+    import sys
+    # Check for --gbif flag
+    use_gbif = "--gbif" in sys.argv
+    main(use_gbif=use_gbif)
