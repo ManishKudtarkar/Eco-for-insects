@@ -190,7 +190,7 @@ def main(use_gbif: bool = False):
     print(f"Final Accuracy: {accuracy:.4f}")
     print("\nNext steps:")
     print("1. Run API: uvicorn src.api:app --reload")
-    print("2. Run Web App: streamlit run src/app.py")
+    print("2. Run Application: docker-compose up -d")
 
 
 if __name__ == "__main__":

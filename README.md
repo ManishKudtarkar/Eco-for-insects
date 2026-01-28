@@ -11,9 +11,7 @@ EcoPredict leverages machine learning models trained on species occurrence recor
 ```
 User
  ↓
-Streamlit Web App (Port 80)
- ↓
-Nginx Reverse Proxy (Port 80/443)
+Nginx Web Server (Port 80)
  ↓
 FastAPI REST API (Port 8000)
  ↓
@@ -29,7 +27,7 @@ Prediction Result
 | Language | Python 3.11 |
 | ML | Scikit-learn (Random Forest) |
 | API | FastAPI with Uvicorn |
-| Web | Nginx (HTML/CSS/JS) |
+| Web | HTML5 / CSS3 / JavaScript |
 | Data | Pandas, PostgreSQL 15 |
 | Cache | Redis 7 |
 | Reverse Proxy | Nginx |
@@ -81,13 +79,12 @@ ECO/
 ├── k8s/
 │   └── deployment.yml                   # Kubernetes manifests
 ├── nginx/
-│   └── nginx.conf                       # Reverse proxy configuration
+│   └── nginx.conf                       # Web server configuration
 ├── monitoring/
 │   ├── prometheus.yml                   # Prometheus config
 │   └── grafana-datasources.yml          # Grafana datasource config
 ├── docker-compose.yml                   # Local development stack
 ├── Dockerfile.api                       # API container image
-├── Dockerfile.web                       # Web container image
 ├── Makefile                             # Build automation
 ├── requirements.txt                     # Production dependencies
 ├── requirements-dev.txt                 # Development dependencies
