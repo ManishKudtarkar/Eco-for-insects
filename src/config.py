@@ -11,7 +11,7 @@ from typing import Optional
 
 class Settings(BaseSettings):
     """Application settings with environment variable support"""
-    
+
     model_config = ConfigDict(env_file=".env", extra="ignore")
 
     # Application
