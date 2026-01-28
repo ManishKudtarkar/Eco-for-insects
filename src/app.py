@@ -7,7 +7,12 @@ import streamlit as st
 import requests
 import pickle
 import os
+import json
 from datetime import datetime
+import pandas as pd
+import numpy as np
+import plotly.graph_objects as go
+import plotly.express as px
 
 # Page configuration
 st.set_page_config(
@@ -16,6 +21,13 @@ st.set_page_config(
     layout="wide",
     initial_sidebar_state="expanded",
 )
+
+# Initialize session state for prediction history
+if 'predictions_history' not in st.session_state:
+    st.session_state.predictions_history = []
+
+if 'last_prediction' not in st.session_state:
+    st.session_state.last_prediction = None
 
 
 # Custom CSS & JavaScript for Enhanced UI
@@ -373,6 +385,127 @@ def make_prediction_local(latitude, longitude, year, species):
         return None, f"Local prediction error: {str(e)}"
 
 
+def create_risk_gauge_chart(confidence):
+    """Create a gauge chart for confidence visualization"""
+    fig = go.Figure(go.Indicator(
+        mode="gauge+number+delta",
+        value=int(confidence * 100),
+        title={'text': "Model Confidence"},
+        domain={'x': [0, 1], 'y': [0, 1]},
+        gauge={
+            'axis': {'range': [None, 100]},
+            'bar': {'color': "#4CAF50"},
+            'steps': [
+                {'range': [0, 33], 'color': "#FFCDD2"},
+                {'range': [33, 66], 'color': "#FFE082"},
+                {'range': [66, 100], 'color': "#C8E6C9"}
+            ],
+            'threshold': {
+                'line': {'color': "red", 'width': 4},
+                'thickness': 0.75,
+                'value': 90
+            }
+        }
+    ))
+    fig.update_layout(
+        height=300,
+        margin=dict(l=20, r=20, t=50, b=20),
+        font=dict(size=12),
+        paper_bgcolor='rgba(240,240,240,0)',
+        plot_bgcolor='rgba(240,240,240,0)',
+    )
+    return fig
+
+
+def create_location_map(latitude, longitude):
+    """Create an interactive map showing the prediction location"""
+    df = pd.DataFrame({
+        'latitude': [latitude],
+        'longitude': [longitude],
+        'name': ['Prediction Location']
+    })
+    
+    fig = px.scatter_mapbox(
+        df, 
+        lat='latitude', 
+        lon='longitude',
+        hover_name='name',
+        hover_data={'latitude': ':.4f', 'longitude': ':.4f'},
+        zoom=5,
+        title="Prediction Location on Map"
+    )
+    
+    fig.update_layout(
+        mapbox_style="open-street-map",
+        height=400,
+        margin=dict(l=0, r=0, t=30, b=0),
+        paper_bgcolor='rgba(240,240,240,0)',
+    )
+    
+    return fig
+
+
+def create_year_trend_chart(risk_status):
+    """Create a trend chart showing historical biodiversity risk"""
+    years = list(range(2000, 2025))
+    # Simulate trend data based on prediction
+    if risk_status == "High Risk":
+        trend_data = [20 + i * 2.5 for i in range(len(years))]
+    else:
+        trend_data = [80 - i * 0.5 for i in range(len(years))]
+    
+    fig = go.Figure()
+    fig.add_trace(go.Scatter(
+        x=years,
+        y=trend_data,
+        mode='lines+markers',
+        name='Population Health %',
+        line=dict(color='#4CAF50' if risk_status == "Stable" else '#F44336', width=3),
+        marker=dict(size=8),
+        fill='tozeroy',
+        fillcolor='rgba(76, 175, 80, 0.2)' if risk_status == "Stable" else 'rgba(244, 67, 54, 0.2)'
+    ))
+    
+    fig.update_layout(
+        title="Biodiversity Trend (Simulated)",
+        xaxis_title="Year",
+        yaxis_title="Population Health %",
+        hovermode='x unified',
+        height=300,
+        margin=dict(l=50, r=20, t=50, b=50),
+        paper_bgcolor='rgba(240,240,240,0)',
+        plot_bgcolor='rgba(255,255,255,0.5)',
+        font=dict(size=11)
+    )
+    
+    return fig
+
+
+def create_stats_dashboard(predictions_history):
+    """Create a statistics dashboard from prediction history"""
+    if not predictions_history:
+        return None
+    
+    total = len(predictions_history)
+    high_risk = sum(1 for p in predictions_history if p.get('decline_risk') == 1)
+    stable = total - high_risk
+    avg_confidence = np.mean([p.get('confidence', 0) for p in predictions_history])
+    
+    col1, col2, col3, col4 = st.columns(4)
+    
+    with col1:
+        st.metric("Total Predictions", total, delta=None)
+    
+    with col2:
+        st.metric("High Risk Cases", high_risk, delta=None)
+    
+    with col3:
+        st.metric("Stable Cases", stable, delta=None)
+    
+    with col4:
+        st.metric("Avg Confidence", f"{avg_confidence*100:.1f}%", delta=None)
+
+
 def main():
     """Main application with enhanced UI"""
 
@@ -582,6 +715,44 @@ def main():
                                     delta=None,
                                 )
 
+                        # Store prediction in session history
+                        st.session_state.predictions_history.append({
+                            'latitude': latitude,
+                            'longitude': longitude,
+                            'year': year,
+                            'species': species,
+                            'decline_risk': result["decline_risk"],
+                            'confidence': result.get("confidence", 0),
+                            'timestamp': datetime.now()
+                        })
+                        st.session_state.last_prediction = result
+
+                        # Display visualizations
+                        st.markdown("### 📊 Advanced Visualizations")
+                        
+                        viz_col1, viz_col2 = st.columns(2)
+                        
+                        with viz_col1:
+                            # Gauge chart for confidence
+                            if "confidence" in result:
+                                st.plotly_chart(
+                                    create_risk_gauge_chart(result["confidence"]),
+                                    use_container_width=True
+                                )
+                        
+                        with viz_col2:
+                            # Year trend chart
+                            st.plotly_chart(
+                                create_year_trend_chart(result["status"]),
+                                use_container_width=True
+                            )
+                        
+                        # Location map
+                        st.plotly_chart(
+                            create_location_map(latitude, longitude),
+                            use_container_width=True
+                        )
+
                         # Input summary
                         st.markdown("### 📋 Input Summary")
                         st.markdown(
@@ -636,6 +807,36 @@ def main():
             """, unsafe_allow_html=True)
 
         st.markdown("</div>", unsafe_allow_html=True)
+
+    # Prediction History Dashboard
+    if st.session_state.predictions_history:
+        st.markdown("---")
+        st.markdown("### 📈 Prediction History Dashboard")
+        
+        create_stats_dashboard(st.session_state.predictions_history)
+        
+        # History table
+        st.markdown("#### 📋 Recent Predictions")
+        history_df = pd.DataFrame(st.session_state.predictions_history[-10:])
+        history_df['decline_risk'] = history_df['decline_risk'].apply(
+            lambda x: '🔴 High Risk' if x == 1 else '🟢 Stable'
+        )
+        history_df['confidence'] = history_df['confidence'].apply(lambda x: f"{x*100:.1f}%")
+        history_df['timestamp'] = pd.to_datetime(history_df['timestamp']).dt.strftime('%Y-%m-%d %H:%M:%S')
+        
+        st.dataframe(
+            history_df.rename(columns={
+                'latitude': '📍 Lat',
+                'longitude': '📍 Lon',
+                'year': '📅 Year',
+                'species': '🐝 Species',
+                'decline_risk': '⚠️ Risk',
+                'confidence': '🎯 Confidence',
+                'timestamp': '🕐 Time'
+            }),
+            use_container_width=True,
+            hide_index=True
+        )
 
     # Footer
     st.markdown("---")
