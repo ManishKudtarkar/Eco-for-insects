@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>EcoPredict - Biodiversity Forecasting</title>
+    <link rel="stylesheet" href="styles.css">
+    <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+</head>
+<body>
+    <div class="container">
+        <!-- Header -->
+        <header class="header">
+            <div class="header-content">
+                <h1 class="logo">🦋 EcoPredict</h1>
+                <p class="tagline">AI-Powered Insect Biodiversity Decline Forecasting</p>
+            </div>
+            <div class="api-status">
+                <span class="status-indicator" id="apiStatus"></span>
+                <span id="statusText">Checking API...</span>
+            </div>
+        </header>
+
+        <!-- Main Content -->
+        <main class="main-content">
+            <div class="grid-container">
+                <!-- Left Column: Input Form -->
+                <section class="input-section">
+                    <h2>📊 Input Parameters</h2>
+                    <form id="predictionForm" class="prediction-form">
+                        <div class="form-group">
+                            <label for="latitude">📍 Latitude</label>
+                            <input 
+                                type="number" 
+                                id="latitude" 
+                                placeholder="e.g., 40.7128" 
+                                min="-90" 
+                                max="90" 
+                                step="0.0001"
+                                value="40.7128"
+                            >
+                            <small>Range: -90 to 90</small>
+                        </div>
+
+                        <div class="form-group">
+                            <label for="longitude">📍 Longitude</label>
+                            <input 
+                                type="number" 
+                                id="longitude" 
+                                placeholder="e.g., -74.0060" 
+                                min="-180" 
+                                max="180" 
+                                step="0.0001"
+                                value="-74.0060"
+                            >
+                            <small>Range: -180 to 180</small>
+                        </div>
+
+                        <div class="form-group">
+                            <label for="year">📅 Year</label>
+                            <input 
+                                type="number" 
+                                id="year" 
+                                placeholder="2024" 
+                                min="1900" 
+                                max="2100"
+                                value="2024"
+                            >
+                            <small>Range: 1900 to 2100</small>
+                        </div>
+
+                        <div class="form-group">
+                            <label for="species">🐝 Species</label>
+                            <input 
+                                type="text" 
+                                id="species" 
+                                placeholder="e.g., Apis mellifera" 
+                                value="Apis mellifera"
+                            >
+                            <small>Insect species name</small>
+                        </div>
+
+                        <button type="submit" class="btn btn-primary">🔍 Predict Decline Risk</button>
+                    </form>
+
+                    <!-- Settings -->
+                    <div class="settings-section">
+                        <h3>⚙️ API Configuration</h3>
+                        <div class="form-group">
+                            <label for="apiUrl">API URL</label>
+                            <input 
+                                type="text" 
+                                id="apiUrl" 
+                                value="http://127.0.0.1:8000"
+                                placeholder="API endpoint"
+                            >
+                        </div>
+                        <button type="button" class="btn btn-secondary" onclick="testApiConnection()">Test Connection</button>
+                    </div>
+                </section>
+
+                <!-- Right Column: Results -->
+                <section class="result-section">
+                    <h2>🎯 Prediction Results</h2>
+                    <div id="resultsContainer" class="results-container">
+                        <div class="info-box">
+                            <strong>👆 Get Started:</strong><br>
+                            1. Enter the location coordinates and year<br>
+                            2. Enter or select the species name<br>
+                            3. Click "Predict Decline Risk" to analyze
+                        </div>
+                    </div>
+
+                    <!-- Visualizations -->
+                    <div id="visualizationsContainer" class="visualizations-container" style="display: none;">
+                        <h3>📊 Advanced Visualizations</h3>
+                        
+                        <div class="visualization-grid">
+                            <div id="gaugeChart" class="chart-container"></div>
+                            <div id="trendChart" class="chart-container"></div>
+                        </div>
+
+                        <div class="map-container">
+                            <h4>🗺️ Prediction Location</h4>
+                            <div id="mapChart" class="chart-container"></div>
+                        </div>
+                    </div>
+                </section>
+            </div>
+
+            <!-- Prediction History -->
+            <section class="history-section" id="historySection" style="display: none;">
+                <h2>📈 Prediction History Dashboard</h2>
+                
+                <div class="stats-grid">
+                    <div class="stat-card">
+                        <div class="stat-value" id="totalPredictions">0</div>
+                        <div class="stat-label">Total Predictions</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-value" id="highRiskCount">0</div>
+                        <div class="stat-label">High Risk Cases</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-value" id="stableCount">0</div>
+                        <div class="stat-label">Stable Cases</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-value" id="avgConfidence">0%</div>
+                        <div class="stat-label">Avg Confidence</div>
+                    </div>
+                </div>
+
+                <table class="history-table" id="historyTable">
+                    <thead>
+                        <tr>
+                            <th>🕐 Time</th>
+                            <th>📍 Location</th>
+                            <th>📅 Year</th>
+                            <th>🐝 Species</th>
+                            <th>⚠️ Risk</th>
+                            <th>🎯 Confidence</th>
+                        </tr>
+                    </thead>
+                    <tbody id="historyBody">
+                    </tbody>
+                </table>
+            </section>
+        </main>
+
+        <!-- Footer -->
+        <footer class="footer">
+            <p>🦋 EcoPredict v1.0 | AI-Powered Biodiversity Forecasting</p>
+            <p>Built with FastAPI & Vanilla JavaScript | Supporting data-driven conservation planning 🌍</p>
+        </footer>
+    </div>
+
+    <!-- Loading Spinner -->
+    <div id="loadingSpinner" class="loading-spinner" style="display: none;">
+        <div class="spinner"></div>
+        <p>🔬 Analyzing biodiversity risk...</p>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>
