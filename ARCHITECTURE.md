@@ -11,7 +11,7 @@
                 ┌────────────┴────────────┐
                 │                         │
 ┌───────────────▼──────────┐  ┌──────────▼──────────────────────┐
-│   Streamlit Frontend     │  │    FastAPI Backend              │
+│   Nginx HTML/CSS/JS      │  │    FastAPI Backend              │
 │   (React Alternative)    │  │    (Python 3.11)                │
 │                          │  │                                  │
 │   • User Interface       │  │   • REST API                    │
@@ -57,8 +57,8 @@
 ## Technology Stack
 
 ### Frontend Layer
-- **Framework**: Streamlit (or React for production)
-- **State Management**: Streamlit session state
+- **Framework**: HTML/CSS/JavaScript with Nginx
+- **Features**: Responsive UI with REST API integration
 - **Styling**: Custom CSS
 - **API Client**: Requests library
 
@@ -210,7 +210,7 @@ def get_prediction(request):
 
 ### Prediction Request Flow
 ```
-User → Nginx → Streamlit → FastAPI → Cache Check
+User → Nginx (static files) → FastAPI API → Cache Check
                                     ↓
                               Cache Miss
                                     ↓

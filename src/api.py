@@ -4,6 +4,7 @@ REST API for serving biodiversity decline predictions
 """
 
 from fastapi import FastAPI, HTTPException, Query, Response
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 import pickle
 import numpy as np
@@ -16,11 +17,127 @@ from src.logger import logger
 from src.metrics import REQUEST_COUNT, REQUEST_LATENCY, PREDICTION_COUNT, CACHE_HITS, EXCEPTIONS
 from src.cache import cache
 
+
+# Geospatial mapping for regions
+REGION_MAPPING = {
+    # North America
+    "north_america": {
+        "name": "North America",
+        "bounds": {"lat": (15, 75), "lon": (-170, -50)},
+        "description": "USA, Canada, Mexico"
+    },
+    # South America
+    "south_america": {
+        "name": "South America",
+        "bounds": {"lat": (-56, 13), "lon": (-82, -35)},
+        "description": "Brazil, Argentina, Colombia, Peru, etc."
+    },
+    # Europe
+    "europe": {
+        "name": "Europe",
+        "bounds": {"lat": (36, 71), "lon": (-10, 40)},
+        "description": "UK, France, Germany, Italy, Spain, etc."
+    },
+    # Africa
+    "africa": {
+        "name": "Africa",
+        "bounds": {"lat": (-35, 37), "lon": (-18, 52)},
+        "description": "Kenya, Egypt, Nigeria, South Africa, etc."
+    },
+    # Asia
+    "asia": {
+        "name": "Asia",
+        "bounds": {"lat": (-10, 75), "lon": (40, 145)},
+        "description": "China, India, Japan, Southeast Asia, etc."
+    },
+    # Australia
+    "australia": {
+        "name": "Australia & Oceania",
+        "bounds": {"lat": (-47, -10), "lon": (113, 180)},
+        "description": "Australia, New Zealand, Pacific Islands"
+    }
+}
+
+
+def get_region_from_coordinates(latitude: float, longitude: float) -> dict:
+    """
+    Convert latitude/longitude to region name
+    Returns region information
+    """
+    for region_key, region_data in REGION_MAPPING.items():
+        lat_min, lat_max = region_data["bounds"]["lat"]
+        lon_min, lon_max = region_data["bounds"]["lon"]
+        
+        if lat_min <= latitude <= lat_max and lon_min <= longitude <= lon_max:
+            return {
+                "region": region_data["name"],
+                "key": region_key,
+                "description": region_data["description"],
+                "latitude": latitude,
+                "longitude": longitude
+            }
+    
+    # Default if no region matches
+    return {
+        "region": "Unknown Region",
+        "key": "unknown",
+        "description": f"Coordinates: {latitude}°, {longitude}°",
+        "latitude": latitude,
+        "longitude": longitude
+    }
+
+
+def get_species_scientific_name(species_name: str) -> dict:
+    """
+    Get scientific name and common names for a species from GBIF
+    Returns quickly with defaults if GBIF times out
+    """
+    try:
+        # Try to get from GBIF with timeout
+        import signal
+        
+        def timeout_handler(signum, frame):
+            raise TimeoutError("GBIF request timed out")
+        
+        # Try to get from GBIF - non-blocking
+        results = gbif_client.search_species(species_name, limit=1)
+        if results:
+            result = results[0]
+            return {
+                "scientific_name": result.get("scientificName", species_name),
+                "common_names": [v.get("vernacularName") for v in result.get("vernacularNames", []) if v],
+                "kingdom": result.get("kingdom"),
+                "order": result.get("order"),
+                "family": result.get("family")
+            }
+    except TimeoutError:
+        logger.warning(f"GBIF request timed out for {species_name}")
+    except Exception as e:
+        logger.warning(f"Could not fetch GBIF data for {species_name}: {e}")
+    
+    # Return defaults quickly if GBIF fails
+    return {
+        "scientific_name": species_name,
+        "common_names": [],
+        "kingdom": None,
+        "order": None,
+        "family": None
+    }
+
 # Initialize FastAPI app
 app = FastAPI(
     title="EcoPredict API",
     description="AI-powered API for predicting insect biodiversity decline",
     version="1.0.0",
+)
+
+# Add CORS middleware for frontend communication
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # Allow all origins in development
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
 
@@ -47,6 +164,10 @@ class PredictionResponse(BaseModel):
     decline_risk: int = Field(..., description="Decline risk (0=Stable, 1=High Risk)")
     status: str = Field(..., description="Human-readable status")
     confidence: Optional[float] = Field(None, description="Prediction confidence")
+    region: Optional[str] = Field(None, description="Geographic region name")
+    region_info: Optional[dict] = Field(None, description="Additional region information")
+    scientific_name: Optional[str] = Field(None, description="Scientific species name from GBIF")
+    common_names: Optional[List[str]] = Field(None, description="Common/vernacular names")
 
 
 # Global variables for model and encoder
@@ -133,6 +254,12 @@ async def predict(request: PredictionRequest):
     try:
         start_time = time.time()
 
+        # Get region information
+        region_info = get_region_from_coordinates(request.latitude, request.longitude)
+        
+        # Get species scientific name and common names
+        species_info = get_species_scientific_name(request.species)
+
         # Cache lookup
         cache_key = cache.get_prediction_cache_key(
             {
@@ -148,10 +275,10 @@ async def predict(request: PredictionRequest):
             REQUEST_LATENCY.labels(endpoint="/predict").observe(time.time() - start_time)
             REQUEST_COUNT.labels(endpoint="/predict", method="POST", status="200").inc()
             return PredictionResponse(**cached)
+        
         # Encode species
         if request.species not in species_encoder.classes_:
             # If species not in training data, use a default encoding
-            # In production, you might want to handle this differently
             species_encoded = 0
             print(f"Warning: Unknown species '{request.species}', using default encoding")
         else:
@@ -171,7 +298,13 @@ async def predict(request: PredictionRequest):
         status = "High Risk" if prediction == 1 else "Stable"
 
         result = PredictionResponse(
-            decline_risk=int(prediction), status=status, confidence=confidence
+            decline_risk=int(prediction),
+            status=status,
+            confidence=confidence,
+            region=region_info["region"],
+            region_info=region_info,
+            scientific_name=species_info["scientific_name"],
+            common_names=species_info["common_names"]
         )
 
         # Cache set

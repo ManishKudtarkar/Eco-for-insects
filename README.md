@@ -4,14 +4,14 @@ An AI-powered web application designed to predict insect biodiversity decline us
 
 ## Overview
 
-EcoPredict leverages machine learning models trained on species occurrence records from GBIF.org and serves predictions through a REST API built with FastAPI. A dynamic web dashboard built with Streamlit allows users to input geographic and biological parameters and receive real-time risk assessments, supporting data-driven conservation planning.
+EcoPredict leverages machine learning models trained on species occurrence records from GBIF.org and serves predictions through a REST API built with FastAPI. A dynamic web dashboard with HTML/CSS/JavaScript allows users to input geographic and biological parameters and receive real-time risk assessments, supporting data-driven conservation planning.
 
 ## Architecture
 
 ```
 User
  ↓
-Streamlit Web App (Port 8501)
+Streamlit Web App (Port 80)
  ↓
 Nginx Reverse Proxy (Port 80/443)
  ↓
@@ -29,7 +29,7 @@ Prediction Result
 | Language | Python 3.11 |
 | ML | Scikit-learn (Random Forest) |
 | API | FastAPI with Uvicorn |
-| Web | Streamlit |
+| Web | Nginx (HTML/CSS/JS) |
 | Data | Pandas, PostgreSQL 15 |
 | Cache | Redis 7 |
 | Reverse Proxy | Nginx |
@@ -42,7 +42,7 @@ Prediction Result
 - **Real Biodiversity Data**: Integrates GBIF.org API (2+ billion occurrence records)
 - **ML Predictions**: Random Forest classifier with species decline risk assessment
 - **Fast API**: FastAPI backend with 12+ endpoints for predictions and data access
-- **Interactive Dashboard**: Streamlit web UI with dynamic inputs and visualizations
+- **Interactive Dashboard**: HTML/CSS/JS web UI with dynamic inputs and API integration
 - **Data Pipeline**: Automated GBIF data fetching, processing, and training
 - **Caching**: Redis-backed prediction caching with 80%+ hit rate targets
 - **Monitoring**: Prometheus metrics collection and Grafana dashboards
@@ -64,7 +64,7 @@ ECO/
 │   └── species_encoder.pkl              # Species label encoder
 ├── src/
 │   ├── api.py                           # FastAPI backend (12+ endpoints)
-│   ├── app.py                           # Streamlit web dashboard
+   │   ├── api.py                           # FastAPI application
 │   ├── train_model.py                   # Model training script
 │   ├── gbif_client.py                   # GBIF API client
 │   ├── data_processor.py                # Data processing pipeline
@@ -149,7 +149,7 @@ ECO/
 
 8. **In another terminal, launch the dashboard:**
    ```bash
-   streamlit run src/app.py
+   # Frontend served by Nginx (localhost)
    ```
 
 ### Docker Setup
@@ -257,7 +257,7 @@ docker-compose down
 **Services:**
 - **API**: http://localhost:8000 (FastAPI)
 - **API Docs**: http://localhost:8000/docs (Swagger UI)
-- **Web**: http://localhost:8501 (Streamlit)
+- **Web**: http://localhost (Nginx)
 - **Nginx**: http://localhost (Reverse proxy)
 - **Prometheus**: http://localhost:9090 (Metrics)
 - **Grafana**: http://localhost:3000 (Dashboards)
