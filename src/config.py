@@ -4,12 +4,15 @@ Environment-based configuration with validation
 """
 
 from pydantic_settings import BaseSettings
+from pydantic import ConfigDict
 from functools import lru_cache
 from typing import Optional
 
 
 class Settings(BaseSettings):
     """Application settings with environment variable support"""
+    
+    model_config = ConfigDict(env_file=".env", extra="ignore")
 
     # Application
     APP_NAME: str = "EcoPredict"
@@ -51,10 +54,6 @@ class Settings(BaseSettings):
     # Monitoring
     ENABLE_METRICS: bool = True
     METRICS_PORT: int = 9090
-
-    class Config:
-        env_file = ".env"
-        case_sensitive = True
 
 
 @lru_cache()

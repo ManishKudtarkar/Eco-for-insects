@@ -28,16 +28,17 @@ class CacheManager:
             self.redis_client = redis.from_url(
                 settings.REDIS_URL,
                 decode_responses=True,
-                socket_connect_timeout=5,
-                socket_keepalive=True,
-                health_check_interval=30,
+                socket_connect_timeout=2,  # Reduced timeout
+                socket_keepalive=False,
+                socket_timeout=2,  # Add socket timeout
+                retry_on_timeout=False,
             )
-            # Test connection
+            # Test connection with timeout
             self.redis_client.ping()
             logger.info("Connected to Redis successfully")
         except Exception as e:
-            logger.error(f"Failed to connect to Redis: {e}")
-            self.redis_client = None
+            logger.warning(f"Redis unavailable (non-critical): {e}")
+            self.redis_client = None  # Disable caching gracefully
 
     def _generate_key(self, prefix: str, data: dict) -> str:
         """Generate cache key from data"""
