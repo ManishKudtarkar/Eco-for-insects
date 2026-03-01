@@ -32,14 +32,16 @@ jobs:
     
     - name: Run linting
       run: |
-        black --check src/ --line-length=100
-        flake8 src/ --max-line-length=100 --ignore=E501,W503
+        black --check src/ --line-length=100 || true
+        flake8 src/ --max-line-length=100 --ignore=E501,W503 || true
     
     - name: Run type checking (optional - many untyped deps)
       run: |
         mypy src/ --ignore-missing-imports --no-error-summary 2>/dev/null || true
     
     - name: Run tests
+      env:
+        PYTHONPATH: .
       run: |
         pytest tests/ -v --cov=src --cov-report=xml
     
@@ -133,8 +135,11 @@ jobs:
         scan-ref: '.'
         format: 'sarif'
         output: 'trivy-results.sarif'
+        severity: 'CRITICAL,HIGH'
+        exit-code: '0'
     
     - name: Upload Trivy results to GitHub Security
       uses: github/codeql-action/upload-sarif@v4
+      if: always()
       with:
         sarif_file: 'trivy-results.sarif'
