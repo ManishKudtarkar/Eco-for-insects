@@ -36,8 +36,10 @@ COPY --from=builder /root/.local /home/ecopredict/.local
 
 # Copy application code
 COPY --chown=ecopredict:ecopredict src/ ./src/
-COPY --chown=ecopredict:ecopredict models/ ./models/
 COPY --chown=ecopredict:ecopredict data/ ./data/
+
+# Copy models directory structure (models will be loaded at runtime or via volume mount)
+COPY --chown=ecopredict:ecopredict models/.gitkeep ./models/.gitkeep
 
 # Switch to non-root user
 USER ecopredict
