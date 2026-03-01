@@ -1,0 +1,347 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>EcoPredict - Biodiversity Forecasting</title>
+    <link rel="stylesheet" href="styles.css?v=4">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700;800&display=swap" rel="stylesheet">
+    <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+</head>
+<body>
+    <!-- Animated Background -->
+    <div class="animated-bg">
+        <div class="circle circle-1"></div>
+        <div class="circle circle-2"></div>
+        <div class="circle circle-3"></div>
+    </div>
+
+    <div class="container">
+        <!-- Header -->
+        <header class="header">
+            <div class="header-content">
+                <h1 class="logo">🦋 EcoPredict</h1>
+                <p class="tagline">AI-Powered Insect Biodiversity Decline Forecasting</p>
+                <p class="subtitle">Protecting our planet's most essential pollinators</p>
+            </div>
+            <div class="api-status">
+                <span class="status-indicator" id="apiStatus"></span>
+                <span id="statusText">Checking API...</span>
+            </div>
+        </header>
+
+        <!-- Navigation Tabs -->
+        <nav class="nav-tabs">
+            <button class="tab-button active" onclick="showSection('prediction')">🔬 Prediction</button>
+            <button class="tab-button" onclick="showSection('knowledge')">📚 Knowledge Base</button>
+            <button class="tab-button" onclick="showSection('about')">ℹ️ About</button>
+        </nav>
+
+        <!-- Main Content -->
+        <main class="main-content">
+            <!-- Prediction Section -->
+            <div id="predictionSection" class="content-section">
+            <div class="grid-container">
+                <!-- Left Column: Input Form -->
+                <section class="input-section">
+                    <h2>📊 Input Parameters</h2>
+                    <form id="predictionForm" class="prediction-form">
+                        <div class="form-group">
+                            <label for="region">🌍 Country/Region</label>
+                            <select id="region">
+                                <option value="">Select a country...</option>
+                            </select>
+                        </div>
+
+                        <div class="form-group">
+                            <label for="year">📅 Year</label>
+                            <input 
+                                type="number" 
+                                id="year" 
+                                placeholder="2024" 
+                                min="1900" 
+                                max="2100"
+                                value="2024"
+                            >
+                            <small>Range: 1900 to 2100</small>
+                        </div>
+
+                        <div class="form-group">
+                            <label for="species">🐝 Species</label>
+                            <input 
+                                type="text" 
+                                id="species" 
+                                placeholder="e.g., Apis mellifera" 
+                                value="Apis mellifera"
+                            >
+                            <small>Insect species name</small>
+                        </div>
+
+                        <button type="submit" class="btn btn-primary">🔍 Predict Decline Risk</button>
+                    </form>
+
+                    <!-- Settings -->
+                    <div class="settings-section">
+                        <h3>⚙️ API Configuration</h3>
+                        <div class="form-group">
+                            <label for="apiUrl">API URL</label>
+                            <input 
+                                type="text" 
+                                id="apiUrl" 
+                                value="http://127.0.0.1:8000"
+                                placeholder="API endpoint"
+                            >
+                        </div>
+                        <button type="button" class="btn btn-secondary" onclick="testApiConnection()">Test Connection</button>
+                    </div>
+                </section>
+
+                <!-- Right Column: Results -->
+                <section class="result-section">
+                    <h2>🎯 Prediction Results</h2>
+                    <div id="resultsContainer" class="results-container">
+                        <div class="info-box">
+                            <strong>👆 Get Started:</strong><br>
+                            1. Enter the location coordinates and year<br>
+                            2. Enter or select the species name<br>
+                            3. Click "Predict Decline Risk" to analyze
+                        </div>
+                    </div>
+
+                    <!-- Visualizations -->
+                    <div id="visualizationsContainer" class="visualizations-container" style="display: none;">
+                        <h3>📊 Advanced Visualizations</h3>
+                        
+                        <div class="visualization-grid">
+                            <div id="gaugeChart" class="chart-container"></div>
+                            <div id="trendChart" class="chart-container"></div>
+                        </div>
+
+                        <div class="map-container">
+                            <h4>🗺️ Prediction Location</h4>
+                            <div id="mapChart" class="chart-container"></div>
+                        </div>
+                    </div>
+                </section>
+            </div>
+
+            <!-- Prediction History -->
+            <section class="history-section" id="historySection" style="display: none;">
+                <h2>📈 Prediction History Dashboard</h2>
+                
+                <div class="stats-grid">
+                    <div class="stat-card">
+                        <div class="stat-value" id="totalPredictions">0</div>
+                        <div class="stat-label">Total Predictions</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-value" id="highRiskCount">0</div>
+                        <div class="stat-label">High Risk Cases</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-value" id="stableCount">0</div>
+                        <div class="stat-label">Stable Cases</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-value" id="avgConfidence">0%</div>
+                        <div class="stat-label">Avg Prediction Score</div>
+                    </div>
+                </div>
+
+                <table class="history-table" id="historyTable">
+                    <thead>
+                        <tr>
+                            <th>🕐 Time</th>
+                            <th>📍 Location</th>
+                            <th>📅 Year</th>
+                            <th>🐝 Species</th>
+                            <th>⚠️ Risk</th>
+                            <th>🎯 Prediction Score</th>
+                        </tr>
+                    </thead>
+                    <tbody id="historyBody">
+                    </tbody>
+                </table>
+            </section>
+            </div>
+
+            <!-- Knowledge Base Section -->
+            <div id="knowledgeSection" class="content-section" style="display: none;">
+                <section class="knowledge-hero">
+                    <h2>🌍 Understanding Insect Biodiversity Crisis</h2>
+                    <p class="hero-description">Insects are the foundation of our ecosystems. Learn about the challenges they face and why their protection matters for our planet's future.</p>
+                </section>
+
+                <div class="knowledge-grid">
+                    <article class="knowledge-card">
+                        <div class="card-icon">🐝</div>
+                        <h3>Why Insects Matter</h3>
+                        <p>Insects pollinate 75% of global crops and represent 80% of all animal species. They are essential for:</p>
+                        <ul>
+                            <li>Food production and agriculture</li>
+                            <li>Ecosystem balance and nutrient cycling</li>
+                            <li>Food sources for birds, fish, and mammals</li>
+                            <li>Plant reproduction and biodiversity</li>
+                        </ul>
+                    </article>
+
+                    <article class="knowledge-card">
+                        <div class="card-icon">📉</div>
+                        <h3>The Decline Crisis</h3>
+                        <p>Recent studies show alarming trends in insect populations:</p>
+                        <ul>
+                            <li><strong>40%</strong> of insect species are declining globally</li>
+                            <li><strong>1/3</strong> are endangered species</li>
+                            <li>Biomass declining at <strong>2.5%</strong> per year</li>
+                            <li>Over <strong>1 million</strong> species at risk</li>
+                        </ul>
+                    </article>
+
+                    <article class="knowledge-card">
+                        <div class="card-icon">🌡️</div>
+                        <h3>Major Threats</h3>
+                        <p>Key factors driving insect population decline:</p>
+                        <ul>
+                            <li><strong>Habitat Loss:</strong> Urbanization and deforestation</li>
+                            <li><strong>Climate Change:</strong> Temperature and weather extremes</li>
+                            <li><strong>Pesticides:</strong> Agricultural chemical use</li>
+                            <li><strong>Pollution:</strong> Air, water, and light pollution</li>
+                            <li><strong>Invasive Species:</strong> Competition and predation</li>
+                        </ul>
+                    </article>
+
+                    <article class="knowledge-card">
+                        <div class="card-icon">🎯</div>
+                        <h3>How AI Helps</h3>
+                        <p>EcoPredict uses machine learning to:</p>
+                        <ul>
+                            <li>Analyze historical biodiversity data</li>
+                            <li>Identify high-risk species and regions</li>
+                            <li>Predict future population trends</li>
+                            <li>Support conservation planning</li>
+                            <li>Enable data-driven interventions</li>
+                        </ul>
+                    </article>
+
+                    <article class="knowledge-card highlight">
+                        <div class="card-icon">🌱</div>
+                        <h3>What You Can Do</h3>
+                        <p>Everyone can contribute to insect conservation:</p>
+                        <ul>
+                            <li>🌸 Plant native wildflowers and gardens</li>
+                            <li>🚫 Avoid using pesticides and herbicides</li>
+                            <li>💡 Reduce light pollution at night</li>
+                            <li>🏡 Create insect-friendly habitats</li>
+                            <li>📢 Spread awareness about insect importance</li>
+                            <li>🔬 Support citizen science projects</li>
+                        </ul>
+                    </article>
+
+                    <article class="knowledge-card">
+                        <div class="card-icon">📊</div>
+                        <h3>Key Species to Monitor</h3>
+                        <p>Common indicator species in our database:</p>
+                        <ul>
+                            <li><strong>Apis mellifera</strong> - Honeybee</li>
+                            <li><strong>Bombus terrestris</strong> - Bumblebee</li>
+                            <li><strong>Vanessa atalanta</strong> - Red Admiral Butterfly</li>
+                            <li><strong>Coccinella septempunctata</strong> - Ladybug</li>
+                            <li><strong>Pieris rapae</strong> - Cabbage White Butterfly</li>
+                        </ul>
+                    </article>
+                </div>
+
+                <section class="data-sources">
+                    <h3>📚 Our Data Sources</h3>
+                    <div class="sources-grid">
+                        <div class="source-card">
+                            <h4>GBIF.org</h4>
+                            <p>Global Biodiversity Information Facility - Over 2 billion species occurrence records</p>
+                        </div>
+                        <div class="source-card">
+                            <h4>Scientific Research</h4>
+                            <p>Peer-reviewed studies on insect population trends and biodiversity metrics</p>
+                        </div>
+                        <div class="source-card">
+                            <h4>Conservation Data</h4>
+                            <p>Real-world conservation monitoring and field observation data</p>
+                        </div>
+                    </div>
+                </section>
+            </div>
+
+            <!-- About Section -->
+            <div id="aboutSection" class="content-section" style="display: none;">
+                <section class="about-hero">
+                    <h2>ℹ️ About EcoPredict</h2>
+                    <p class="hero-description">A cutting-edge AI platform for biodiversity conservation and ecological forecasting</p>
+                </section>
+
+                <div class="about-content">
+                    <article class="about-card">
+                        <h3>🎯 Our Mission</h3>
+                        <p>EcoPredict aims to combat the global insect decline crisis by providing actionable intelligence through AI-powered predictions. We empower researchers, conservationists, and policymakers with data-driven insights to protect Earth's most vital pollinators.</p>
+                    </article>
+
+                    <article class="about-card">
+                        <h3>🔧 Technology Stack</h3>
+                        <div class="tech-stack">
+                            <div class="tech-item">🐍 Python & FastAPI</div>
+                            <div class="tech-item">🤖 Machine Learning (Random Forest)</div>
+                            <div class="tech-item">🗄️ PostgreSQL Database</div>
+                            <div class="tech-item">⚡ Redis Caching</div>
+                            <div class="tech-item">🐳 Docker & Kubernetes</div>
+                            <div class="tech-item">📊 Prometheus & Grafana</div>
+                        </div>
+                    </article>
+
+                    <article class="about-card">
+                        <h3>📈 Model Performance</h3>
+                        <p>Our Random Forest classifier analyzes geographical, temporal, and species-specific features to predict biodiversity decline risk. The model considers:</p>
+                        <ul>
+                            <li>Geographical coordinates (latitude/longitude)</li>
+                            <li>Temporal patterns (year)</li>
+                            <li>Species-specific characteristics</li>
+                            <li>Historical population trends</li>
+                        </ul>
+                    </article>
+
+                    <article class="about-card highlight">
+                        <h3>🌐 Open Source</h3>
+                        <p>EcoPredict is built with transparency and collaboration in mind. Our codebase, methodology, and data sources are open for scientific review and community contributions.</p>
+                    </article>
+                </div>
+            </div>
+        </main>
+
+        <!-- Footer -->
+        <footer class="footer">
+            <div class="footer-content">
+                <div class="footer-section">
+                    <h4>🦋 EcoPredict</h4>
+                    <p>AI-Powered Insect Biodiversity Forecasting</p>
+                </div>
+                <div class="footer-section">
+                    <h4>Resources</h4>
+                    <p>Data: GBIF.org | Tech: FastAPI, ML, Docker</p>
+                </div>
+                <div class="footer-section">
+                    <h4>Mission</h4>
+                    <p>Supporting data-driven conservation planning 🌍</p>
+                </div>
+            </div>
+            <div class="footer-bottom">
+                <p>© 2026 EcoPredict | Made with 💚 for our planet</p>
+            </div>
+        </footer>
+    </div>
+
+    <!-- Loading Spinner -->
+    <div id="loadingSpinner" class="loading-spinner" style="display: none;">
+        <div class="spinner"></div>
+        <p>🔬 Analyzing biodiversity risk...</p>
+    </div>
+
+    <script src="app.js?v=3"></script>
+</body>
+</html>
