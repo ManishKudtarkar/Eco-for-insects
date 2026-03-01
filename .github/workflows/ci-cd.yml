@@ -100,24 +100,6 @@ jobs:
         tags: ${{ steps.meta-web.outputs.tags }}
         labels: ${{ steps.meta-web.outputs.labels }}
 
-  deploy:
-    name: Deploy to Kubernetes
-    runs-on: ubuntu-latest
-    needs: build
-    if: github.ref == 'refs/heads/main'
-    
-    steps:
-    - uses: actions/checkout@v4
-    
-    - name: Set up kubectl
-      uses: azure/setup-kubectl@v3
-    
-    - name: Deploy to cluster
-      run: |
-        kubectl apply -f k8s/deployment.yml
-        kubectl rollout status deployment/ecopredict-api -n ecopredict
-        kubectl rollout status deployment/ecopredict-web -n ecopredict
-
   security-scan:
     name: Security Scan
     runs-on: ubuntu-latest
