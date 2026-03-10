@@ -1,0 +1,70 @@
+services:
+  # API Service (Backend)
+  - type: web
+    name: ecopredict-api
+    env: docker
+    dockerfilePath: ./Dockerfile.api
+    dockerContext: .
+    plan: free  # Change to 'starter' or higher for production
+    region: oregon  # Change to your preferred region
+    healthCheckPath: /health
+    envVars:
+      - key: PORT
+        value: 8000
+      - key: ENVIRONMENT
+        value: production
+      - key: SECRET_KEY
+        generateValue: true  # Render will auto-generate a secure secret
+      - key: CORS_ORIGINS
+        value: "*"  # Update this to your frontend URL after deployment
+      - key: DATABASE_URL
+        value: ""  # Add if using PostgreSQL
+      - key: REDIS_URL
+        value: ""  # Add if using Redis for caching
+      - key: LOG_LEVEL
+        value: INFO
+      - key: MAX_WORKERS
+        value: 1  # Increase for paid plans
+      - key: PYTHONUNBUFFERED
+        value: 1
+    autoDeploy: true
+    disk:
+      name: ecopredict-data
+      mountPath: /app/data
+      sizeGB: 1  # Free tier: 1GB, adjust for larger datasets
+
+  # Frontend Service (React)
+  - type: web
+    name: ecopredict-frontend
+    env: docker
+    dockerfilePath: ./Dockerfile
+    dockerContext: ./react-frontend
+    plan: free  # Change to 'starter' or higher for production
+    region: oregon  # Change to your preferred region
+    envVars:
+      - key: REACT_APP_API_URL
+        fromService:
+          type: web
+          name: ecopredict-api
+          envVarKey: RENDER_EXTERNAL_URL
+    buildFilter:
+      paths:
+        - react-frontend/**
+    autoDeploy: true
+
+# Optional: PostgreSQL Database
+# Uncomment if you want to use PostgreSQL instead of CSV files
+# databases:
+#   - name: ecopredict-db
+#     databaseName: ecopredict
+#     user: ecopredict
+#     plan: free  # Free tier: 90-day expiration, 1GB storage
+#     region: oregon
+
+# Optional: Redis Cache
+# Uncomment if you want to add Redis for caching
+# - type: redis
+#   name: ecopredict-cache
+#   ipAllowList: []  # Empty list = allow all
+#   plan: free  # Free tier: 25MB, 30-day expiration
+#   region: oregon
