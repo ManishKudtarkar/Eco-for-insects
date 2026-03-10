@@ -15,8 +15,6 @@ services:
         value: production
       - key: SECRET_KEY
         generateValue: true  # Render will auto-generate a secure secret
-      - key: CORS_ORIGINS
-        value: '["*"]'  # JSON array format - Update to ["https://your-frontend.onrender.com"] after deployment
       - key: DATABASE_URL
         value: ""  # Add if using PostgreSQL
       - key: REDIS_URL

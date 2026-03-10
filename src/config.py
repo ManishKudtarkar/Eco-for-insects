@@ -3,10 +3,11 @@ Configuration Management
 Environment-based configuration with validation
 """
 
-from pydantic_settings import BaseSettings
-from pydantic import ConfigDict
+from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic import ConfigDict, field_validator
 from functools import lru_cache
 from typing import Optional
+import json
 
 
 class Settings(BaseSettings):
@@ -39,6 +40,21 @@ class Settings(BaseSettings):
     SECRET_KEY: str = "your-secret-key-change-in-production"
     ALLOWED_HOSTS: list[str] = ["*"]
     CORS_ORIGINS: list[str] = ["*"]
+
+    @field_validator("CORS_ORIGINS", mode="before")
+    @classmethod
+    def parse_cors_origins(cls, v):
+        """Parse CORS_ORIGINS from string or list"""
+        if isinstance(v, str):
+            # Handle comma-separated string
+            if v.startswith('['):
+                # Handle JSON array string
+                try:
+                    return json.loads(v)
+                except json.JSONDecodeError:
+                    return ["*"]
+            return [origin.strip() for origin in v.split(',')]
+        return v
 
     # Logging
     LOG_LEVEL: str = "INFO"
