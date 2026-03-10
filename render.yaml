@@ -26,7 +26,6 @@ services:
     buildCommand: cd react-frontend && npm ci && npm run build
     staticPublishPath: ./react-frontend/build
     plan: free
-    region: oregon
     routes:
       - type: rewrite
         source: /*
