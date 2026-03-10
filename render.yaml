@@ -23,8 +23,8 @@ services:
   - type: web
     name: ecopredict-frontend-static
     runtime: static
-    buildCommand: cd react-frontend && npm ci && npm run build
-    staticPublishPath: ./react-frontend/build
+    buildCommand: npm ci --prefix react-frontend && npm run build --prefix react-frontend
+    staticPublishPath: react-frontend/build
     routes:
       - type: rewrite
         source: /*
