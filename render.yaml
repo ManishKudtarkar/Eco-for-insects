@@ -1,55 +1,42 @@
 services:
-  # API Service (Backend)
+  # API Service (Backend) - Native Python
   - type: web
     name: ecopredict-api
-    env: docker
-    dockerfilePath: ./Dockerfile.api
-    dockerContext: .
-    plan: free  # Change to 'starter' or higher for production
-    region: oregon  # Change to your preferred region
+    runtime: python
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn src.api:app --host 0.0.0.0 --port $PORT
+    plan: free
+    region: oregon
     healthCheckPath: /health
     envVars:
-      - key: PORT
-        value: 8000
       - key: ENVIRONMENT
         value: production
       - key: SECRET_KEY
-        generateValue: true  # Render will auto-generate a secure secret
-      - key: DATABASE_URL
-        value: ""  # Add if using PostgreSQL
-      - key: REDIS_URL
-        value: ""  # Add if using Redis for caching
+        generateValue: true
       - key: LOG_LEVEL
         value: INFO
-      - key: MAX_WORKERS
-        value: 1  # Increase for paid plans
       - key: PYTHONUNBUFFERED
         value: 1
     autoDeploy: true
-    # Note: Persistent disks require a paid plan (Starter or higher)
-    # Uncomment the disk section below if using a paid plan
-    # disk:
-    #   name: ecopredict-data
-    #   mountPath: /app/data
-    #   sizeGB: 1
 
-  # Frontend Service (React)
+  # Frontend Service (React) - Static Site
   - type: web
     name: ecopredict-frontend
-    env: docker
-    dockerfilePath: Dockerfile
-    dockerContext: ./react-frontend
-    plan: free  # Change to 'starter' or higher for production
-    region: oregon  # Change to your preferred region
+    runtime: static
+    buildCommand: cd react-frontend && npm ci && npm run build
+    staticPublishPath: ./react-frontend/build
+    plan: free
+    region: oregon
+    routes:
+      - type: rewrite
+        source: /*
+        destination: /index.html
     envVars:
       - key: REACT_APP_API_URL
         fromService:
           type: web
           name: ecopredict-api
           envVarKey: RENDER_EXTERNAL_URL
-    buildFilter:
-      paths:
-        - react-frontend/**
     autoDeploy: true
 
 # Optional: PostgreSQL Database
