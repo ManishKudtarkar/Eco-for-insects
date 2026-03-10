@@ -43,6 +43,25 @@ Thumbs.db
 # Environment variables
 .env
 .env.local
+.env.production.local
 
 # Logs
 *.log
+logs/
+
+# User data (contains sensitive information)
+data/users.json
+
+# Node modules
+node_modules/
+react-frontend/node_modules/
+react-frontend/build/
+
+# Docker
+.dockerignore
+docker-compose.override.local.yml
+
+# Coverage
+htmlcov/
+.coverage
+*.cover

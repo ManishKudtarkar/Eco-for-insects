@@ -2,22 +2,48 @@
 
 An AI-powered web application designed to predict insect biodiversity decline using real-world environmental data and machine learning.
 
+## 🎉 NEW: React Frontend Integration
+
+A modern React-based frontend from the [ecoPredict repository](https://github.com/Kavya070605/ecoPredict) has been integrated with this backend! 
+
+**Features:**
+- 🏠 Beautiful home page with hero section
+- 📊 Interactive dashboard with real-time charts
+- 🗺️ Global risk assessment map
+- 📈 Correlation analytics
+- 🔐 Login/signup pages
+- ⚡ Smooth animations with Framer Motion
+
+**Quick Start:**
+```bash
+# Start all services with React frontend
+docker-compose up --build
+
+# Access at http://localhost
+```
+
+📖 **See [INTEGRATION_GUIDE.md](INTEGRATION_GUIDE.md) for complete details!**
+
+---
+
 ## Overview
 
-EcoPredict leverages machine learning models trained on species occurrence records from GBIF.org and serves predictions through a REST API built with FastAPI. A dynamic web dashboard with HTML/CSS/JavaScript allows users to input geographic and biological parameters and receive real-time risk assessments, supporting data-driven conservation planning.
+EcoPredict leverages machine learning models trained on species occurrence records from GBIF.org and serves predictions through a REST API built with FastAPI. Two frontend options are available:
+- **React Frontend** (NEW) - Modern React application with advanced UI/UX - `http://localhost` (port 80)
+- **Legacy Frontend** - Original HTML/CSS/JavaScript dashboard - `http://localhost:8081` (port 8081)
 
 ## Architecture
 
 ```
-User
- ↓
-Nginx Web Server (Port 80)
- ↓
-FastAPI REST API (Port 8000)
- ↓
-[ML Model] [Redis Cache] [PostgreSQL Database]
- ↓
-Prediction Result
+User Browser
+     ↓
+Nginx Reverse Proxy (Port 80)
+     ├─→ React Frontend (Port 8080) - NEW!
+     └─→ FastAPI REST API (Port 8000) via /api/*
+          ↓
+     [ML Model] [Redis Cache] [PostgreSQL Database]
+          ↓
+     Prediction Result
 ```
 
 ## Tech Stack
@@ -27,7 +53,8 @@ Prediction Result
 | Language | Python 3.11 |
 | ML | Scikit-learn (Random Forest) |
 | API | FastAPI with Uvicorn |
-| Web | HTML5 / CSS3 / JavaScript |
+| **Frontend (NEW)** | **React 19.2, React Router, Recharts, Framer Motion** |
+| Web (Legacy) | HTML5 / CSS3 / JavaScript |
 | Data | Pandas, PostgreSQL 15 |
 | Cache | Redis 7 |
 | Reverse Proxy | Nginx |

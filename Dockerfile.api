@@ -21,7 +21,7 @@ FROM python:3.11-slim
 
 # Create non-root user
 RUN useradd -m -u 1000 ecopredict && \
-    mkdir -p /app/models /app/logs && \
+    mkdir -p /app/models /app/logs /app/data && \
     chown -R ecopredict:ecopredict /app
 
 WORKDIR /app
@@ -36,10 +36,10 @@ COPY --from=builder /root/.local /home/ecopredict/.local
 
 # Copy application code
 COPY --chown=ecopredict:ecopredict src/ ./src/
-COPY --chown=ecopredict:ecopredict data/ ./data/
+COPY --chown=ecopredict:ecopredict data/insect.csv ./data/
 
-# Copy models directory structure (models will be loaded at runtime or via volume mount)
-COPY --chown=ecopredict:ecopredict models/.gitkeep ./models/.gitkeep
+# Ensure directories exist
+RUN mkdir -p ./models ./logs
 
 # Switch to non-root user
 USER ecopredict

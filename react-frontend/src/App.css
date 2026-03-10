@@ -1,0 +1,29 @@
+/* App specific minimal styles, relying mainly on index.css for global tokens */
+
+.app-wrapper {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+}
+
+.main-content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Helper for map containers etc */
+.full-height-section {
+  min-height: calc(100vh - 80px); /* minus navbar height approx */
+}
+
+/* Specific section heights to avoid image distortion and ensure reliable layout */
+.section-70vh {
+  height: 70vh;
+  min-height: 500px;
+}
+
+.section-60vh {
+  height: 60vh;
+  min-height: 450px;
+}

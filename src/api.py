@@ -3,19 +3,130 @@ EcoPredict FastAPI Backend
 REST API for serving biodiversity decline predictions
 """
 
-from fastapi import FastAPI, HTTPException, Query, Response
+from fastapi import FastAPI, HTTPException, Query, Response, Depends, status
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel, Field
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+from pydantic import BaseModel, Field, EmailStr
 import pickle
 import numpy as np
 from typing import Optional, List
 import time
 import os
+import json
+import jwt
+from datetime import datetime, timedelta
+from passlib.context import CryptContext
 from src.gbif_client import gbif_client
 from src.data_processor import data_processor
 from src.logger import logger
 from src.metrics import REQUEST_COUNT, REQUEST_LATENCY, PREDICTION_COUNT, CACHE_HITS, EXCEPTIONS
 from src.cache import cache
+
+# Authentication configuration
+SECRET_KEY = os.getenv("SECRET_KEY", "your-secret-key-change-this-in-production")
+ALGORITHM = "HS256"
+ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24  # 24 hours
+
+# Password hashing
+pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+security = HTTPBearer()
+
+
+# User models
+class UserRegister(BaseModel):
+    name: str = Field(..., min_length=2, max_length=100)
+    email: EmailStr
+    password: str = Field(..., min_length=6)
+
+class UserLogin(BaseModel):
+    email: EmailStr
+    password: str
+
+class Token(BaseModel):
+    access_token: str
+    token_type: str = "bearer"
+    user: dict
+
+class User(BaseModel):
+    id: str
+    name: str
+    email: str
+    created_at: str
+
+
+# User storage (simple JSON file for development)
+USERS_FILE = "data/users.json"
+
+def load_users():
+    """Load users from JSON file"""
+    if not os.path.exists(USERS_FILE):
+        os.makedirs("data", exist_ok=True)
+        with open(USERS_FILE, "w") as f:
+            json.dump({}, f)
+        return {}
+    
+    with open(USERS_FILE, "r") as f:
+        return json.load(f)
+
+def save_users(users):
+    """Save users to JSON file"""
+    os.makedirs("data", exist_ok=True)
+    with open(USERS_FILE, "w") as f:
+        json.dump(users, f, indent=2)
+
+def hash_password(password: str) -> str:
+    """Hash a password"""
+    return pwd_context.hash(password)
+
+def verify_password(plain_password: str, hashed_password: str) -> bool:
+    """Verify a password against a hash"""
+    return pwd_context.verify(plain_password, hashed_password)
+
+def create_access_token(data: dict) -> str:
+    """Create a JWT access token"""
+    to_encode = data.copy()
+    expire = datetime.utcnow() + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+    to_encode.update({"exp": expire})
+    encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
+    return encoded_jwt
+
+def verify_token(token: str) -> dict:
+    """Verify and decode a JWT token"""
+    try:
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        return payload
+    except jwt.ExpiredSignatureError:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Token has expired"
+        )
+    except jwt.JWTError:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid token"
+        )
+
+async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(security)):
+    """Get current authenticated user"""
+    token = credentials.credentials
+    payload = verify_token(token)
+    user_email = payload.get("sub")
+    
+    if user_email is None:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid authentication credentials"
+        )
+    
+    users = load_users()
+    if user_email not in users:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="User not found"
+        )
+    
+    user = users[user_email]
+    return User(**user)
 
 
 # Geospatial mapping for regions
@@ -236,6 +347,119 @@ async def health_check():
     }
 
 
+# Authentication endpoints
+@app.post("/auth/register", response_model=Token)
+async def register(user_data: UserRegister):
+    """Register a new user"""
+    try:
+        users = load_users()
+        
+        # Check if user already exists
+        if user_data.email in users:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Email already registered"
+            )
+        
+        # Create new user
+        user_id = f"user_{int(time.time() * 1000)}"
+        hashed_password = hash_password(user_data.password)
+        
+        new_user = {
+            "id": user_id,
+            "name": user_data.name,
+            "email": user_data.email,
+            "password": hashed_password,
+            "created_at": datetime.utcnow().isoformat()
+        }
+        
+        users[user_data.email] = new_user
+        save_users(users)
+        
+        # Create access token
+        access_token = create_access_token(data={"sub": user_data.email})
+        
+        # Return token and user info (without password)
+        user_response = {
+            "id": new_user["id"],
+            "name": new_user["name"],
+            "email": new_user["email"],
+            "created_at": new_user["created_at"]
+        }
+        
+        logger.info(f"New user registered: {user_data.email}")
+        
+        return Token(
+            access_token=access_token,
+            user=user_response
+        )
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Registration error: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Registration failed"
+        )
+
+
+@app.post("/auth/login", response_model=Token)
+async def login(credentials: UserLogin):
+    """Login user"""
+    try:
+        users = load_users()
+        
+        # Check if user exists
+        if credentials.email not in users:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid email or password"
+            )
+        
+        user = users[credentials.email]
+        
+        # Verify password
+        if not verify_password(credentials.password, user["password"]):
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid email or password"
+            )
+        
+        # Create access token
+        access_token = create_access_token(data={"sub": credentials.email})
+        
+        # Return token and user info (without password)
+        user_response = {
+            "id": user["id"],
+            "name": user["name"],
+            "email": user["email"],
+            "created_at": user["created_at"]
+        }
+        
+        logger.info(f"User logged in: {credentials.email}")
+        
+        return Token(
+            access_token=access_token,
+            user=user_response
+        )
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Login error: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Login failed"
+        )
+
+
+@app.get("/auth/me", response_model=User)
+async def get_me(current_user: User = Depends(get_current_user)):
+    """Get current user profile"""
+    return current_user
+
+
 @app.post("/predict", response_model=PredictionResponse)
 async def predict(request: PredictionRequest):
     """
@@ -341,6 +565,227 @@ async def list_species():
         raise HTTPException(status_code=503, detail="Encoder not loaded")
 
     return {"species": species_encoder.classes_.tolist(), "count": len(species_encoder.classes_)}
+
+
+@app.get("/search/insects")
+async def search_insects(
+    region: Optional[str] = Query(None, description="Region filter (e.g., 'north_america', 'europe')"),
+    country: Optional[str] = Query(None, description="Country name or code"),
+    year_from: Optional[int] = Query(None, ge=1900, le=2100, description="Start year"),
+    year_to: Optional[int] = Query(None, ge=1900, le=2100, description="End year"),
+    species: Optional[str] = Query(None, description="Species name filter"),
+    status: Optional[str] = Query(None, description="Population trend filter"),
+    limit: int = Query(100, ge=1, le=500, description="Maximum results")
+):
+    """
+    Advanced search for insect records with location and temporal filters
+    
+    Searches through local dataset and GBIF occurrences with comprehensive filtering
+    """
+    try:
+        import pandas as pd
+        
+        # Load local dataset
+        local_data_path = "data/insect.csv"
+        results = []
+        
+        if os.path.exists(local_data_path):
+            df = pd.read_csv(local_data_path)
+            
+            # Apply filters
+            if year_from:
+                df = df[df['year'] >= year_from]
+            if year_to:
+                df = df[df['year'] <= year_to]
+            if species:
+                df = df[df['species'].str.contains(species, case=False, na=False)]
+            if status:
+                df = df[df['population_trend'].str.contains(status, case=False, na=False)]
+            
+            # Apply region filter
+            if region and region in REGION_MAPPING:
+                bounds = REGION_MAPPING[region]["bounds"]
+                lat_min, lat_max = bounds["lat"]
+                lon_min, lon_max = bounds["lon"]
+                df = df[
+                    (df['latitude'] >= lat_min) & (df['latitude'] <= lat_max) &
+                    (df['longitude'] >= lon_min) & (df['longitude'] <= lon_max)
+                ]
+            
+            # Limit results
+            df = df.head(limit)
+            
+            # Format results with enhanced information
+            for _, row in df.iterrows():
+                region_info = get_region_from_coordinates(row['latitude'], row['longitude'])
+                species_info = get_species_scientific_name(row['species'])
+                
+                results.append({
+                    "id": f"local_{_}",
+                    "species": row['species'],
+                    "scientific_name": species_info['scientific_name'],
+                    "common_names": species_info.get('common_names', []),
+                    "latitude": float(row['latitude']),
+                    "longitude": float(row['longitude']),
+                    "year": int(row['year']),
+                    "population_trend": row['population_trend'],
+                    "region": region_info['region'],
+                    "region_key": region_info['key'],
+                    "description": region_info['description'],
+                    "kingdom": species_info.get('kingdom'),
+                    "order": species_info.get('order'),
+                    "family": species_info.get('family'),
+                    "source": "local_database"
+                })
+        
+        # Get statistics
+        stats = {
+            "total_records": len(results),
+            "species_count": len(set(r['species'] for r in results)),
+            "year_range": [min(r['year'] for r in results), max(r['year'] for r in results)] if results else [],
+            "regions": list(set(r['region'] for r in results)),
+            "trend_distribution": {}
+        }
+        
+        if results:
+            from collections import Counter
+            trend_counts = Counter(r['population_trend'] for r in results)
+            stats['trend_distribution'] = dict(trend_counts)
+        
+        return {
+            "status": "success",
+            "filters": {
+                "region": region,
+                "country": country,
+                "year_from": year_from,
+                "year_to": year_to,
+                "species": species,
+                "status": status
+            },
+            "statistics": stats,
+            "results": results
+        }
+        
+    except Exception as e:
+        logger.error(f"Search error: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Search error: {str(e)}")
+
+
+@app.get("/species/declining-analysis")
+async def get_species_declining_analysis(
+    species: str = Query(..., description="Species name to analyze")
+):
+    """
+    Analyze where a specific species is declining the most
+    
+    Returns detailed information about population trends by region
+    """
+    try:
+        import pandas as pd
+        from collections import defaultdict
+        
+        local_data_path = "data/insect.csv"
+        
+        if not os.path.exists(local_data_path):
+            raise HTTPException(status_code=404, detail="Data file not found")
+        
+        df = pd.read_csv(local_data_path)
+        
+        # Filter by species (case-insensitive)
+        species_df = df[df['species'].str.contains(species, case=False, na=False)]
+        
+        if species_df.empty:
+            raise HTTPException(status_code=404, detail=f"No data found for species: {species}")
+        
+        # Get species scientific name
+        species_info = get_species_scientific_name(species_df.iloc[0]['species'])
+        
+        # Analyze by region
+        regional_analysis = defaultdict(lambda: {
+            'declining': 0,
+            'stable': 0,
+            'increasing': 0,
+            'total': 0,
+            'locations': []
+        })
+        
+        for _, row in species_df.iterrows():
+            region_info = get_region_from_coordinates(row['latitude'], row['longitude'])
+            region_key = region_info['key']
+            trend = row['population_trend'].lower()
+            
+            regional_analysis[region_key]['total'] += 1
+            if trend == 'declining':
+                regional_analysis[region_key]['declining'] += 1
+            elif trend == 'stable':
+                regional_analysis[region_key]['stable'] += 1
+            elif trend == 'increasing':
+                regional_analysis[region_key]['increasing'] += 1
+            
+            regional_analysis[region_key]['locations'].append({
+                'latitude': float(row['latitude']),
+                'longitude': float(row['longitude']),
+                'year': int(row['year']),
+                'trend': row['population_trend']
+            })
+        
+        # Calculate percentages and format results
+        regions_data = []
+        for region_key, data in regional_analysis.items():
+            total = data['total']
+            declining_pct = (data['declining'] / total * 100) if total > 0 else 0
+            
+            # Get region name
+            region_name = "Unknown"
+            for key, val in REGION_MAPPING.items():
+                if key == region_key:
+                    region_name = val['name']
+                    break
+            
+            regions_data.append({
+                'region': region_name,
+                'region_key': region_key,
+                'total_records': total,
+                'declining_count': data['declining'],
+                'stable_count': data['stable'],
+                'increasing_count': data['increasing'],
+                'declining_percentage': round(declining_pct, 2),
+                'locations': data['locations'][:10]  # Limit to 10 locations per region
+            })
+        
+        # Sort by declining percentage (highest first)
+        regions_data.sort(key=lambda x: x['declining_percentage'], reverse=True)
+        
+        # Overall statistics
+        total_records = len(species_df)
+        overall_declining = len(species_df[species_df['population_trend'].str.lower() == 'declining'])
+        overall_declining_pct = (overall_declining / total_records * 100) if total_records > 0 else 0
+        
+        return {
+            "status": "success",
+            "species": species_df.iloc[0]['species'],
+            "scientific_name": species_info['scientific_name'],
+            "common_names": species_info.get('common_names', []),
+            "taxonomy": {
+                "kingdom": species_info.get('kingdom'),
+                "order": species_info.get('order'),
+                "family": species_info.get('family')
+            },
+            "overall_statistics": {
+                "total_records": total_records,
+                "declining_count": overall_declining,
+                "declining_percentage": round(overall_declining_pct, 2),
+                "regions_affected": len(regions_data)
+            },
+            "regional_analysis": regions_data,
+            "most_declining_region": regions_data[0] if regions_data else None
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Declining analysis error: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Analysis error: {str(e)}")
 
 
 @app.get("/gbif/search")
