@@ -1,7 +1,7 @@
 services:
   # API Service (Backend) - Native Python
   - type: web
-    name: ecopredict-api
+    name: ecopredict-api-native
     runtime: python
     buildCommand: pip install -r requirements.txt
     startCommand: uvicorn src.api:app --host 0.0.0.0 --port $PORT
@@ -20,12 +20,10 @@ services:
     autoDeploy: true
 
   # Frontend Service (React) - Static Site
-  - type: web
-    name: ecopredict-frontend
-    runtime: static
+  - type: static
+    name: ecopredict-frontend-static
     buildCommand: cd react-frontend && npm ci && npm run build
     staticPublishPath: ./react-frontend/build
-    plan: free
     routes:
       - type: rewrite
         source: /*
@@ -34,7 +32,7 @@ services:
       - key: REACT_APP_API_URL
         fromService:
           type: web
-          name: ecopredict-api
+          name: ecopredict-api-native
           envVarKey: RENDER_EXTERNAL_URL
     autoDeploy: true
 
