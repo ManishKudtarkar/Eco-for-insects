@@ -47,14 +47,10 @@ const Dashboard = () => {
 
   return (
     <div className="section-padding container">
-      <motion.div
-        initial={{ opacity: 0, y: -20 }}
-        animate={{ opacity: 1, y: 0 }}
-        style={styles.header}
-      >
+      <div style={styles.header}>
         <h1 style={styles.title}>Global Analytics Dashboard</h1>
         <p style={styles.subtitle}>Real-time monitoring of insect biodiversity and AI-driven forecasts</p>
-      </motion.div>
+      </div>
 
       {/* AI Processing Metrics */}
       <h3 style={styles.sectionHeading}>Data Engine Metrics</h3>
