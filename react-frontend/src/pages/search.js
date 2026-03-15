@@ -17,6 +17,8 @@ const REGION_LABELS = {
 const formatRegion = (key) =>
   REGION_LABELS[key] || (key ? key.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase()) : 'Unknown');
 
+const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:8000';
+
 const InsectSearch = () => {
   const [searchParams, setSearchParams] = useState({
     region: '',
@@ -58,7 +60,7 @@ const InsectSearch = () => {
   useEffect(() => {
     const fetchSpecies = async () => {
       try {
-        const response = await fetch('http://localhost:8000/species');
+        const response = await fetch(`${API_BASE_URL}/species`);
         if (response.ok) {
           const data = await response.json();
           setAvailableSpecies(data.species || []);
@@ -88,7 +90,7 @@ const InsectSearch = () => {
       Object.keys(searchParams).forEach(key => {
         if (searchParams[key]) params.append(key, searchParams[key]);
       });
-      const response = await fetch(`http://localhost:8000/search/insects?${params}`);
+      const response = await fetch(`${API_BASE_URL}/search/insects?${params}`);
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
         throw new Error(errorData.detail || 'Search failed');
@@ -116,7 +118,7 @@ const InsectSearch = () => {
     setDecliningAnalysis(null);
     try {
       const response = await fetch(
-        `http://localhost:8000/species/declining-analysis?species=${encodeURIComponent(speciesName)}`
+        `${API_BASE_URL}/species/declining-analysis?species=${encodeURIComponent(speciesName)}`
       );
       if (!response.ok) throw new Error('Failed to fetch declining analysis');
       const data = await response.json();
