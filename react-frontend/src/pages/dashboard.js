@@ -1,5 +1,4 @@
-import React, { useState, useEffect } from 'react';
-import { motion } from 'framer-motion';
+import React from 'react';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar } from 'recharts';
 import { TrendingDown, AlertTriangle, Bug, MapPin, Database, Activity, CheckCircle, Cpu } from 'lucide-react';
 import { StatCard } from '../components/Cards';
@@ -21,30 +20,6 @@ const mockRegionData = [
 ];
 
 const Dashboard = () => {
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    // Simulate data loading
-    const timer = setTimeout(() => setLoading(false), 1200);
-    return () => clearTimeout(timer);
-  }, []);
-
-  if (loading) {
-    return (
-      <div style={styles.loaderContainer}>
-        <motion.div
-          animate={{ rotate: 360 }}
-          transition={{ repeat: Infinity, duration: 2, ease: "linear" }}
-        >
-          <Bug size={48} color="var(--color-moss)" />
-        </motion.div>
-        <p style={{ marginTop: '1rem', color: 'var(--color-text-muted)', fontFamily: 'var(--font-display)', fontWeight: '500' }}>
-          Initializing Distributed Data Processing...
-        </p>
-      </div>
-    );
-  }
-
   return (
     <div className="section-padding container">
       <div style={styles.header}>
@@ -126,13 +101,7 @@ const Dashboard = () => {
 
       <div style={styles.chartsGrid}>
         {/* Main Trend Chart */}
-        <motion.div
-          className="glass-panel"
-          style={styles.chartCard}
-          initial={{ opacity: 0, x: -20 }}
-          animate={{ opacity: 1, x: 0 }}
-          transition={{ delay: 0.5 }}
-        >
+        <div className="glass-panel" style={styles.chartCard}>
           <h3 style={styles.chartTitle}>Population Trend & 2030 AI Forecast</h3>
           <div style={{ height: '350px', width: '100%' }}>
             <ResponsiveContainer width="100%" height="100%">
@@ -163,16 +132,10 @@ const Dashboard = () => {
               </AreaChart>
             </ResponsiveContainer>
           </div>
-        </motion.div>
+        </div>
 
         {/* Regional Bar Chart */}
-        <motion.div
-          className="glass-panel"
-          style={styles.chartCard}
-          initial={{ opacity: 0, x: 20 }}
-          animate={{ opacity: 1, x: 0 }}
-          transition={{ delay: 0.6 }}
-        >
+        <div className="glass-panel" style={styles.chartCard}>
           <h3 style={styles.chartTitle}>Highest Decline by Region (%)</h3>
           <div style={{ height: '350px', width: '100%' }}>
             <ResponsiveContainer width="100%" height="100%">
@@ -193,20 +156,13 @@ const Dashboard = () => {
               </BarChart>
             </ResponsiveContainer>
           </div>
-        </motion.div>
+        </div>
       </div>
     </div>
   );
 };
 
 const styles = {
-  loaderContainer: {
-    height: '80vh',
-    display: 'flex',
-    flexDirection: 'column',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
   header: {
     marginBottom: '3rem',
   },

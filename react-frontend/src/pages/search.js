@@ -73,6 +73,14 @@ const InsectSearch = () => {
   }, []);
 
   const handleSearch = async () => {
+    const fromYear = searchParams.year_from ? Number(searchParams.year_from) : null;
+    const toYear = searchParams.year_to ? Number(searchParams.year_to) : null;
+
+    if (fromYear && toYear && fromYear > toYear) {
+      setError('Year From must be less than or equal to Year To.');
+      return;
+    }
+
     setLoading(true);
     setError(null);
     try {
@@ -81,12 +89,15 @@ const InsectSearch = () => {
         if (searchParams[key]) params.append(key, searchParams[key]);
       });
       const response = await fetch(`http://localhost:8000/search/insects?${params}`);
-      if (!response.ok) throw new Error('Search failed');
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.detail || 'Search failed');
+      }
       const data = await response.json();
       setResults(data.results || []);
       setStatistics(data.statistics || null);
     } catch (err) {
-      setError('Failed to fetch search results. Please try again.');
+      setError(err.message || 'Failed to fetch search results. Please try again.');
       console.error('Search error:', err);
     } finally {
       setLoading(false);

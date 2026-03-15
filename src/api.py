@@ -13,6 +13,7 @@ from typing import Optional, List
 import time
 import os
 import json
+import math
 import jwt
 from datetime import datetime, timedelta
 from passlib.context import CryptContext
@@ -168,6 +169,108 @@ REGION_MAPPING = {
         "description": "Australia, New Zealand, Pacific Islands"
     }
 }
+
+DEFAULT_GBIF_SPECIES = [
+    "Apis mellifera",
+    "Bombus terrestris",
+    "Pieris rapae",
+    "Vanessa atalanta",
+    "Papilio xuthus",
+    "Danaus plexippus",
+    "Bombus impatiens",
+    "Vanessa cardui",
+]
+
+
+def classify_population_trend(early_avg: float, recent_avg: float) -> str:
+    """Classify a population trend from early and recent averages."""
+    if early_avg <= 0 and recent_avg <= 0:
+        return "stable"
+    if early_avg <= 0 and recent_avg > 0:
+        return "increasing"
+    if recent_avg < early_avg * 0.8:
+        return "declining"
+    if recent_avg > early_avg * 1.2:
+        return "increasing"
+    return "stable"
+
+
+def add_species_trends(df):
+    """Add per-species population trend labels to a GBIF occurrence dataframe."""
+    import pandas as pd
+
+    if df.empty:
+        df["population_trend"] = pd.Series(dtype=str)
+        return df
+
+    yearly_counts = df.groupby(["species", "year"]).size().reset_index(name="count")
+    trend_rows = []
+
+    for species_name in yearly_counts["species"].unique():
+        species_data = yearly_counts[yearly_counts["species"] == species_name].sort_values("year")
+        counts = species_data["count"].tolist()
+
+        if len(counts) < 2:
+            trend = "stable"
+        else:
+            midpoint = len(counts) // 2
+            early_avg = float(np.mean(counts[:midpoint])) if midpoint > 0 else float(np.mean(counts))
+            recent_avg = float(np.mean(counts[midpoint:]))
+            trend = classify_population_trend(early_avg, recent_avg)
+
+        for _, row in species_data.iterrows():
+            trend_rows.append({
+                "species": species_name,
+                "year": row["year"],
+                "population_trend": trend,
+            })
+
+    trends_df = pd.DataFrame(trend_rows)
+    if trends_df.empty:
+        df["population_trend"] = "stable"
+        return df
+
+    df = df.merge(trends_df, on=["species", "year"], how="left")
+    df["population_trend"] = df["population_trend"].fillna("stable")
+    return df
+
+
+def fetch_gbif_dataframe(
+    species_list: List[str],
+    max_records: int = 100,
+    year_from: Optional[int] = None,
+    year_to: Optional[int] = None,
+):
+    """Fetch live GBIF occurrence data and convert it to a dataframe."""
+    import pandas as pd
+
+    species_list = [species_name for species_name in species_list if species_name]
+    if not species_list:
+        return pd.DataFrame()
+
+    records_per_species = max(20, min(120, math.ceil(max_records / len(species_list)) + 10))
+    all_occurrences = []
+
+    for species_name in species_list:
+        try:
+            all_occurrences.extend(
+                gbif_client.fetch_species_data(
+                    species_name=species_name,
+                    max_records=records_per_species,
+                    year_from=year_from,
+                    year_to=year_to,
+                )
+            )
+        except Exception as e:
+            logger.warning(f"GBIF fetch failed for {species_name}: {e}")
+
+    df = data_processor.occurrences_to_dataframe(all_occurrences)
+    if df.empty:
+        return df
+
+    df = df.dropna(subset=["latitude", "longitude", "year", "species"])
+    df = df.drop_duplicates(subset=["key"])
+    return df
 
 
 def get_region_from_coordinates(latitude: float, longitude: float) -> dict:
@@ -560,11 +663,12 @@ async def metrics():
 
 @app.get("/species")
 async def list_species():
-    """List all known species in the model"""
-    if species_encoder is None:
-        raise HTTPException(status_code=503, detail="Encoder not loaded")
-
-    return {"species": species_encoder.classes_.tolist(), "count": len(species_encoder.classes_)}
+    """List suggested GBIF species for the search UI."""
+    return {
+        "species": DEFAULT_GBIF_SPECIES,
+        "count": len(DEFAULT_GBIF_SPECIES),
+        "source": "gbif_seed_list",
+    }
 
 
 @app.get("/search/insects")
@@ -577,66 +681,91 @@ async def search_insects(
     status: Optional[str] = Query(None, description="Population trend filter"),
     limit: int = Query(100, ge=1, le=500, description="Maximum results")
 ):
-    """
-    Advanced search for insect records with location and temporal filters
-    
-    Searches through local dataset and GBIF occurrences with comprehensive filtering
-    """
+    """Advanced search for insect records using live GBIF occurrence data only."""
     try:
         import pandas as pd
-        
-        # Load local dataset
-        local_data_path = "data/insect.csv"
+
+        if year_from is not None and year_to is not None and year_from > year_to:
+            raise HTTPException(
+                status_code=400,
+                detail="Invalid year range: year_from must be less than or equal to year_to",
+            )
+
+        species_list = [species.strip()] if species else DEFAULT_GBIF_SPECIES
+        df = fetch_gbif_dataframe(
+            species_list=species_list,
+            max_records=limit,
+            year_from=year_from,
+            year_to=year_to,
+        )
+
+        if df.empty:
+            return {
+                "status": "success",
+                "filters": {
+                    "region": region,
+                    "country": country,
+                    "year_from": year_from,
+                    "year_to": year_to,
+                    "species": species,
+                    "status": status,
+                },
+                "statistics": {
+                    "total_records": 0,
+                    "species_count": 0,
+                    "year_range": [],
+                    "regions": [],
+                    "trend_distribution": {},
+                },
+                "results": [],
+                "source": "gbif_live",
+            }
+
+        df = add_species_trends(df)
+        df["region_info"] = df.apply(
+            lambda row: get_region_from_coordinates(float(row["latitude"]), float(row["longitude"])),
+            axis=1,
+        )
+        df["region_key"] = df["region_info"].apply(lambda value: value["key"])
+        df["region"] = df["region_info"].apply(lambda value: value["region"])
+        df["description"] = df["region_info"].apply(lambda value: value["description"])
+
+        if species:
+            df = df[df["species"].str.contains(species, case=False, na=False)]
+        if status:
+            df = df[df["population_trend"].str.contains(status, case=False, na=False)]
+        if country:
+            df = df[df["country"].fillna("").str.contains(country, case=False, na=False)]
+        if region:
+            df = df[df["region_key"] == region]
+
+        df = df.sort_values(by=["year", "species"], ascending=[False, True]).head(limit)
+
+        species_metadata = {}
+        for species_name in df["species"].dropna().unique().tolist():
+            species_metadata[species_name] = get_species_scientific_name(species_name)
+
         results = []
-        
-        if os.path.exists(local_data_path):
-            df = pd.read_csv(local_data_path)
-            
-            # Apply filters
-            if year_from:
-                df = df[df['year'] >= year_from]
-            if year_to:
-                df = df[df['year'] <= year_to]
-            if species:
-                df = df[df['species'].str.contains(species, case=False, na=False)]
-            if status:
-                df = df[df['population_trend'].str.contains(status, case=False, na=False)]
-            
-            # Apply region filter
-            if region and region in REGION_MAPPING:
-                bounds = REGION_MAPPING[region]["bounds"]
-                lat_min, lat_max = bounds["lat"]
-                lon_min, lon_max = bounds["lon"]
-                df = df[
-                    (df['latitude'] >= lat_min) & (df['latitude'] <= lat_max) &
-                    (df['longitude'] >= lon_min) & (df['longitude'] <= lon_max)
-                ]
-            
-            # Limit results
-            df = df.head(limit)
-            
-            # Format results with enhanced information
-            for _, row in df.iterrows():
-                region_info = get_region_from_coordinates(row['latitude'], row['longitude'])
-                species_info = get_species_scientific_name(row['species'])
-                
-                results.append({
-                    "id": f"local_{_}",
-                    "species": row['species'],
-                    "scientific_name": species_info['scientific_name'],
-                    "common_names": species_info.get('common_names', []),
-                    "latitude": float(row['latitude']),
-                    "longitude": float(row['longitude']),
-                    "year": int(row['year']),
-                    "population_trend": row['population_trend'],
-                    "region": region_info['region'],
-                    "region_key": region_info['key'],
-                    "description": region_info['description'],
-                    "kingdom": species_info.get('kingdom'),
-                    "order": species_info.get('order'),
-                    "family": species_info.get('family'),
-                    "source": "local_database"
-                })
+        for index, row in df.iterrows():
+            species_info = species_metadata.get(row["species"], {})
+            results.append({
+                "id": f"gbif_{row.get('key', index)}",
+                "species": row["species"],
+                "scientific_name": species_info.get("scientific_name", row.get("scientific_name", row["species"])),
+                "common_names": species_info.get("common_names", []),
+                "latitude": float(row["latitude"]),
+                "longitude": float(row["longitude"]),
+                "year": int(row["year"]),
+                "population_trend": row["population_trend"],
+                "region": row["region"],
+                "region_key": row["region_key"],
+                "description": row["description"],
+                "kingdom": species_info.get("kingdom"),
+                "order": species_info.get("order"),
+                "family": species_info.get("family"),
+                "country": row.get("country"),
+                "source": "gbif_live",
+            })
         
         # Get statistics
         stats = {
@@ -663,7 +792,8 @@ async def search_insects(
                 "status": status
             },
             "statistics": stats,
-            "results": results
+            "results": results,
+            "source": "gbif_live"
         }
         
     except Exception as e:
@@ -675,32 +805,33 @@ async def search_insects(
 async def get_species_declining_analysis(
     species: str = Query(..., description="Species name to analyze")
 ):
-    """
-    Analyze where a specific species is declining the most
-    
-    Returns detailed information about population trends by region
-    """
+    """Analyze a species using live GBIF occurrences only."""
     try:
         import pandas as pd
         from collections import defaultdict
-        
-        local_data_path = "data/insect.csv"
-        
-        if not os.path.exists(local_data_path):
-            raise HTTPException(status_code=404, detail="Data file not found")
-        
-        df = pd.read_csv(local_data_path)
-        
-        # Filter by species (case-insensitive)
-        species_df = df[df['species'].str.contains(species, case=False, na=False)]
-        
+
+        species_df = fetch_gbif_dataframe(
+            species_list=[species.strip()],
+            max_records=300,
+            year_from=2015,
+            year_to=datetime.utcnow().year,
+        )
+
+        if not species_df.empty:
+            species_df = species_df[species_df['species'].str.contains(species, case=False, na=False)]
+
         if species_df.empty:
             raise HTTPException(status_code=404, detail=f"No data found for species: {species}")
-        
-        # Get species scientific name
+
         species_info = get_species_scientific_name(species_df.iloc[0]['species'])
-        
-        # Analyze by region
+
+        species_df["region_info"] = species_df.apply(
+            lambda row: get_region_from_coordinates(float(row['latitude']), float(row['longitude'])),
+            axis=1,
+        )
+        species_df["region_key"] = species_df["region_info"].apply(lambda value: value["key"])
+        species_df["region_name"] = species_df["region_info"].apply(lambda value: value["region"])
+
         regional_analysis = defaultdict(lambda: {
             'declining': 0,
             'stable': 0,
@@ -708,48 +839,54 @@ async def get_species_declining_analysis(
             'total': 0,
             'locations': []
         })
-        
-        for _, row in species_df.iterrows():
-            region_info = get_region_from_coordinates(row['latitude'], row['longitude'])
-            region_key = region_info['key']
-            trend = row['population_trend'].lower()
-            
-            regional_analysis[region_key]['total'] += 1
-            if trend == 'declining':
-                regional_analysis[region_key]['declining'] += 1
-            elif trend == 'stable':
-                regional_analysis[region_key]['stable'] += 1
-            elif trend == 'increasing':
-                regional_analysis[region_key]['increasing'] += 1
-            
-            regional_analysis[region_key]['locations'].append({
-                'latitude': float(row['latitude']),
-                'longitude': float(row['longitude']),
-                'year': int(row['year']),
-                'trend': row['population_trend']
-            })
-        
-        # Calculate percentages and format results
+
+        for region_key in species_df['region_key'].dropna().unique().tolist():
+            region_rows = species_df[species_df['region_key'] == region_key].copy()
+            region_name = region_rows.iloc[0]['region_name']
+            total_records = len(region_rows)
+
+            yearly_counts = region_rows.groupby('year').size().sort_index()
+            trend_windows = {'declining': 0, 'stable': 0, 'increasing': 0}
+
+            if len(yearly_counts) >= 2:
+                counts = yearly_counts.tolist()
+                for previous, current in zip(counts[:-1], counts[1:]):
+                    trend_windows[classify_population_trend(float(previous), float(current))] += 1
+            else:
+                trend_windows['stable'] = 1
+
+            total_windows = max(sum(trend_windows.values()), 1)
+            declining_count = round(total_records * trend_windows['declining'] / total_windows)
+            stable_count = round(total_records * trend_windows['stable'] / total_windows)
+            increasing_count = total_records - declining_count - stable_count
+            declining_percentage = (declining_count / total_records * 100) if total_records > 0 else 0
+
+            regional_analysis[region_key]['declining'] = max(declining_count, 0)
+            regional_analysis[region_key]['stable'] = max(stable_count, 0)
+            regional_analysis[region_key]['increasing'] = max(increasing_count, 0)
+            regional_analysis[region_key]['total'] = total_records
+            regional_analysis[region_key]['region_name'] = region_name
+            regional_analysis[region_key]['declining_percentage'] = round(declining_percentage, 2)
+            regional_analysis[region_key]['locations'] = [
+                {
+                    'latitude': float(row['latitude']),
+                    'longitude': float(row['longitude']),
+                    'year': int(row['year']),
+                    'trend': 'declining' if declining_percentage > 50 else 'stable' if declining_percentage < 20 else 'increasing'
+                }
+                for _, row in region_rows.head(10).iterrows()
+            ]
+
         regions_data = []
         for region_key, data in regional_analysis.items():
-            total = data['total']
-            declining_pct = (data['declining'] / total * 100) if total > 0 else 0
-            
-            # Get region name
-            region_name = "Unknown"
-            for key, val in REGION_MAPPING.items():
-                if key == region_key:
-                    region_name = val['name']
-                    break
-            
             regions_data.append({
-                'region': region_name,
+                'region': data.get('region_name', 'Unknown'),
                 'region_key': region_key,
-                'total_records': total,
+                'total_records': data['total'],
                 'declining_count': data['declining'],
                 'stable_count': data['stable'],
                 'increasing_count': data['increasing'],
-                'declining_percentage': round(declining_pct, 2),
+                'declining_percentage': data.get('declining_percentage', 0),
                 'locations': data['locations'][:10]  # Limit to 10 locations per region
             })
         
